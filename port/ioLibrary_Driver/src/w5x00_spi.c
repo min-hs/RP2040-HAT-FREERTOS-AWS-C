@@ -178,7 +178,7 @@ void wizchip_spi_initialize(void)
 void wizchip_cris_initialize(void)
 {
     critical_section_init(&g_wizchip_cri_sec);
-    reg_wizchip_cris_cbfunc(wizchip_critical_section_lock, wizchip_critical_section_unlock);
+    // reg_wizchip_cris_cbfunc(wizchip_critical_section_lock, wizchip_critical_section_unlock);
 }
 
 void wizchip_initialize(void)

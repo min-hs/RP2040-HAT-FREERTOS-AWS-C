@@ -102,6 +102,7 @@ tlsContext_t g_mqtt_tls_context;
 
 /* Semaphore Handle */
 SemaphoreHandle_t publishSemaphore;
+// TaskHandle_t publishHandle, yieldHandle;
 
 /**
  * ----------------------------------------------------------------------------------------------------
@@ -111,7 +112,8 @@ SemaphoreHandle_t publishSemaphore;
 /* Task */
 void aws_mqtt_task(void *argument);
 void aws_yield_task(void *argument);
-//void wizchip_dhcp_task(void *argument);
+// void wizchip_dhcp_task(void *argument);
+// void vStatusCheckTask(void *argument);
 
 /* Clock */
 static void set_clock_khz(void);
@@ -134,7 +136,7 @@ int main()
 
     stdio_init_all();
 
-    wizchip_delay_ms(1000 * 3); // wait for 3 seconds
+    // wizchip_delay_ms(1000 * 3); // wait for 3 seconds
 
     wizchip_spi_initialize();
     wizchip_cris_initialize();
@@ -145,11 +147,10 @@ int main()
 
     wizchip_1ms_timer_initialize(repeating_timer_callback);
 
-    // publishSemaphore = xSemaphoreCreateBinary();
     publishSemaphore = xSemaphoreCreateMutex();
 
     xTaskCreate(aws_mqtt_task, "MQTT_Task", MQTT_TASK_STACK_SIZE, NULL, MQTT_TASK_PRIORITY, NULL);
-    xTaskCreate(aws_yield_task, "YIELD_Task", configMINIMAL_STACK_SIZE, NULL, YIELD_TASK_PRIORITY, NULL);
+    xTaskCreate(aws_yield_task, "YIELD_Task", YIELD_TASK_STACK_SIZE, NULL, YIELD_TASK_PRIORITY, NULL);
 
     vTaskStartScheduler();
 
@@ -284,35 +285,19 @@ void aws_mqtt_task(void *argument)
 
     xSemaphoreGive(publishSemaphore);
     while(1)
-    {    
-#if 0
-        retval = mqtt_transport_yield(MQTT_YIELD_TIMEOUT);
-
-        if (retval != 0)
-        {
-            printf(" Failed, mqtt_transport_yield returned %d\n", retval);   
-
-            while (1)
-            {
-                vTaskDelay(1000);
-            }
-        } 
-#endif
+    {
         sprintf(g_mqtt_pub_msg_buf, "{\"message\":\"Hello, World!\", \"publish count\":\"%d\"}\n", pub_cnt++);
         retval = mqtt_transport_publish(MQTT_PUB_TOPIC, g_mqtt_pub_msg_buf, strlen(g_mqtt_pub_msg_buf), 0);
-
-        vTaskDelay(pdMS_TO_TICKS(MQTT_PUB_PERIOD)); //5sec Delay
-
+        
         if (retval != 0)
         {
             printf("Publish failed : %d\n", retval);
-
             while(1)
             {
-                vTaskDelay(100);
+                vTaskDelay(1000);
             }
         }
-        
+        vTaskDelay(MQTT_PUB_PERIOD); //5sec Delay
     }
 }
 
@@ -323,39 +308,20 @@ void aws_yield_task(void *argument)
     uint32_t pub_count = 0;
     uint32_t pub_cnt = 0;
 
-    vTaskDelay(pdMS_TO_TICKS(10000)); // block 3sec
-    // sprintf(g_mqtt_pub_msg_buf, "{\"message\":\"Hello, World!\", \"publish count\":\"%d\"}\n", pub_cnt++);
-    // retval = mqtt_transport_publish(MQTT_PUB_TOPIC, g_mqtt_pub_msg_buf, strlen(g_mqtt_pub_msg_buf), 0);
+    xSemaphoreTake(publishSemaphore, portMAX_DELAY);
     while(1)
     {
-        // if (g_net_info.dhcp == NETINFO_DHCP)
-        // {
-        //     DHCP_run();
-        // }
-#if 1
-        if (xSemaphoreTake(publishSemaphore, portMAX_DELAY) == pdTRUE)
+        retval = mqtt_transport_yield(MQTT_YIELD_TIMEOUT);
+        if (retval != 0)
         {
-            printf("[Yield Task running LOOP]\r\n");
+            printf(" Failed, mqtt_transport_yield returned %d\n", retval);
 
-            retval = mqtt_transport_yield(MQTT_YIELD_TIMEOUT);
-
-            if (retval != 0)
+            while (1)
             {
-                printf(" Failed, mqtt_transport_yield returned %d\n", retval);
-
-                while (1)
-                {
-                    vTaskDelay(100);
-                }
+                vTaskDelay(100);
             }
-            vTaskDelay(10);
-            // xSemaphoreGive(publishSemaphore);
         }
-        else
-        {
-            printf("[Yield task] not running\r\n");
-        }
-#endif
+        vTaskDelay(10);
     }
 }
 
